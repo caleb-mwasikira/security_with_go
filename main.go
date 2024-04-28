@@ -2,21 +2,23 @@ package main
 
 import (
 	"log"
+
+	arch "example.com/backup/archives"
 )
 
 func main() {
-	src := "/home/netrunner/College"
-	archive := "/home/netrunner/College.zip"
+	source := "/home/netrunner/College"
+	dest := "/home/netrunner/College.zip"
 
-	err := ZipArchive(src, "")
+	dest, err := arch.ZipArchive(source, "")
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("done archiving files")
+	log.Printf("done archiving source %v into destination %v", source, dest)
 
-	err = Unzip(archive)
+	archive := "~/Videos.zip"
+	err = arch.Unzip(archive)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("done extracting zip file")
 }

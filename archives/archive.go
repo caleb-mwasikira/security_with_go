@@ -1,4 +1,4 @@
-package main
+package archives
 
 import (
 	"archive/zip"
@@ -13,15 +13,15 @@ import (
 	"strings"
 )
 
-func ZipArchive(source string, dest string) error {
+func ZipArchive(source string, dest string) (string, error) {
 	// check if source is a valid directory
 	stat, err := os.Stat(source)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if !stat.IsDir() {
-		return fmt.Errorf("%s is not a directory", source)
+		return "", fmt.Errorf("failed to archive path %s as it is not a directory", source)
 	}
 
 	// check if dest is a valid directory
@@ -31,93 +31,82 @@ func ZipArchive(source string, dest string) error {
 		// at the parent of source dir
 		if os.IsNotExist(err) {
 			parent := filepath.Dir(source)
-			dest = filepath.Join(parent, fmt.Sprintf("%s.zip", stat.Name()))
+			dest = filepath.Join(parent, fmt.Sprintf("%v.zip", stat.Name()))
 		} else {
-			return err
+			return "", err
 		}
 	}
 
 	// create zip file to write to
-	log.Printf("creating zip file %s ...\n", dest)
 	zip_file, err := os.Create(dest)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer zip_file.Close()
 
 	// create a zip writer on top of the zip file
 	zip_writer := zip.NewWriter(zip_file)
+	defer zip_writer.Close()
 
 	// loop though all files in source dir adding them to the archive
-	err = filepath.WalkDir(source, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	err = filepath.WalkDir(
+		source,
+		func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
 
-		// skip adding to archive if we are still on the source dir
-		if path == source {
-			return nil
-		}
+			// skip adding to archive if we are still on the source dir
+			if path == source {
+				return nil
+			}
 
-		// get sub-directories after source dir
-		// for example: we are archiving the dir /home/user/foo
-		// that has the structure /home/user/foo/bar/baz.
-		// we remove the prefix path (/home/user/foo) so that we can
-		// remain with /bar/baz, that we can place in our archive as
-		// foo.zip/bar/baz
+			zip_path, found := strings.CutPrefix(path, source)
+			if !found {
+				return fmt.Errorf("directory %s has no prefix %s", path, source)
+			}
 
-		zip_path, found := strings.CutPrefix(path, source)
-		if !found {
-			return fmt.Errorf("directory %s has no prefix %s", path, source)
-		}
+			// if dirEntry is a directory, create new directory
+			// inside the archive
+			if d.IsDir() {
+				zip_path = fmt.Sprintf("%s/", zip_path)
+				log.Printf("creating directory %s in archive ...", zip_path)
 
-		// if dirEntry is a directory, create new directory
-		// inside the archive
-		if d.IsDir() {
-			zip_path = fmt.Sprintf("%s/", zip_path)
-			log.Printf("creating directory %s in archive ...", zip_path)
+				_, err := zip_writer.Create(zip_path)
+				if err != nil {
+					return err
+				}
 
-			_, err := zip_writer.Create(fmt.Sprintf("%s/", zip_path))
+				return nil
+			}
+
+			// copy file into the zip archive
+			log.Printf("adding file %s into archive ...", zip_path)
+
+			out_file, err := zip_writer.Create(zip_path)
+			if err != nil {
+				return err
+			}
+
+			in_file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer in_file.Close()
+
+			_, err = io.Copy(out_file, in_file)
 			if err != nil {
 				return err
 			}
 
 			return nil
-		}
-
-		// copy file into the zip archive
-		log.Printf("adding file %s into archive ...", zip_path)
-
-		out_file, err := zip_writer.Create(zip_path)
-		if err != nil {
-			return err
-		}
-
-		in_file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer in_file.Close()
-
-		err = CopyFile(in_file, out_file)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
+		})
 
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// close our zip writer
-	err = zip_writer.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return dest, nil
 }
 
 func genNewFilename() (string, error) {
