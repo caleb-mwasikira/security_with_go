@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"example.com/backup/codecs"
+	"github.com/caleb-mwasikira/security_with_go/codecs"
 )
 
 func main() {
