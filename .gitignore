@@ -21,5 +21,6 @@
 go.work
 go.work.sum
 
-# Go build directory
+# User-defined directories
 build/
+test_data/
